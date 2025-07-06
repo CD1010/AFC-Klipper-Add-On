@@ -1348,28 +1348,54 @@ class afc:
             self.afcDeltaTime.log_with_time("Tool sensor after extruder move done")
 
         self.save_vars()
-        # Synchronize and move filament out of the hub.
+        # Synchronize and move filament out of the hub using sensor-based retraction to prevent overshooting.
         cur_lane.unsync_to_extruder()
         if cur_lane.hub != 'direct':
-            cur_lane.move_advanced(cur_hub.afc_unload_bowden_length * -1, SpeedMode.LONG, assist_active = AssistActive.YES)
+            # Use hub sensor to stop retraction and prevent overshooting
+            # Start with a reasonable initial retraction, but don't exceed the configured bowden length
+            max_retract_distance = cur_hub.afc_unload_bowden_length
+            total_retracted = 0
+            
+            # Move in increments while monitoring hub sensor state
+            while cur_hub.state and total_retracted < max_retract_distance:
+                # Use smaller moves when getting close to expected distance for better precision
+                if total_retracted < (max_retract_distance * 0.8):
+                    move_distance = min(cur_lane.long_moves_speed / 2, max_retract_distance - total_retracted)
+                    cur_lane.move_advanced(move_distance * -1, SpeedMode.LONG, assist_active = AssistActive.YES)
+                else:
+                    # Use shorter moves for precision near the end
+                    move_distance = min(cur_lane.short_move_dis, max_retract_distance - total_retracted)
+                    cur_lane.move_advanced(move_distance * -1, SpeedMode.SHORT, assist_active = AssistActive.YES)
+                
+                total_retracted += move_distance
+                
+                # Small pause to allow sensor state to update
+                self.reactor.pause(self.reactor.monotonic() + 0.05)
+            
+            # If we've reached max distance but hub is still triggered, continue with short moves as safety
+            num_tries = 0
+            while cur_hub.state and num_tries < 10:
+                cur_lane.move_advanced(cur_lane.short_move_dis * -1, SpeedMode.SHORT, assist_active = AssistActive.YES)
+                num_tries += 1
+                self.reactor.pause(self.reactor.monotonic() + 0.1)
         else:
             cur_lane.move_advanced(cur_lane.dist_hub * -1, SpeedMode.HUB, assist_active = AssistActive.DYNAMIC)
 
-        self.afcDeltaTime.log_with_time("Long retract done")
+        self.afcDeltaTime.log_with_time("Hub-sensor-based retract done")
 
         # Clear toolhead's loaded state for easier error handling later.
         cur_lane.set_unloaded()
 
         self.save_vars()
 
-        # Ensure filament is fully cleared from the hub.
+        # Hub should now be clear, but verify and handle any remaining issues
         num_tries = 0
         while cur_hub.state:
             cur_lane.move_advanced(cur_lane.short_move_dis * -1, SpeedMode.SHORT, assist_active = AssistActive.YES)
             num_tries += 1
-            if num_tries > (cur_hub.afc_unload_bowden_length / cur_lane.short_move_dis):
+            if num_tries > 20:  # Increased from original calculation-based limit for safety
                 # Handle failure if the filament doesn't clear the hub.
-                message = 'Hub is not clearing, filament may be stuck in hub'
+                message = 'Hub is not clearing after sensor-based retraction, filament may be stuck in hub'
                 message += '\nPlease check to make sure filament has not broken off and caused the sensor to stay stuck'
                 message += '\nIf you have to retract filament back, use LANE_MOVE macro for {}.'.format(cur_lane.name)
                 if self.function.in_print():
@@ -1806,9 +1832,23 @@ class afc:
         self.logger.error("Test Message 1")
         self.logger.error("Test Message 2")
         self.logger.error("Test Message 3")
-def cmd_AFC_SET_EXTRUDER_SENSOR(self, gcmd):
-        extruder_name = gcmd.get_str('EXTRUDER')
-        sensor_name = gcmd.get_str('SENSOR')
+
+    def cmd_AFC_SET_EXTRUDER_SENSOR(self, gcmd):
+        """
+        Manually set the state of a toolhead sensor.
+        
+        Usage
+        -----
+        `AFC_SET_EXTRUDER_SENSOR EXTRUDER=<extruder_name> SENSOR=<start|end> STATE=<0|1>`
+        
+        Example
+        -----
+        ```
+        AFC_SET_EXTRUDER_SENSOR EXTRUDER=extruder SENSOR=start STATE=1
+        ```
+        """
+        extruder_name = gcmd.get('EXTRUDER')
+        sensor_name = gcmd.get('SENSOR')
         state = gcmd.get_int('STATE')
 
         if extruder_name not in self.tools:
