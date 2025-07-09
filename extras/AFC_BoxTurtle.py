@@ -153,6 +153,13 @@ class afcBoxTurtle(afcUnit):
                 msg = 'Failed {} after {}mm'.format(checkpoint, bow_pos)
                 return False, msg, bow_pos
 
+            # Store the bowden distance before retracting
+            bowden_dist = 0
+            if cur_extruder.tool_start == 'buffer':
+                bowden_dist = bow_pos - (cur_lane.short_move_dis * 2)
+            else:
+                bowden_dist = bow_pos - cur_lane.short_move_dis
+
             cur_lane.move(bow_pos * -1, cur_lane.long_moves_speed, cur_lane.long_moves_accel, True)
 
             success, message, hub_dis = self.calibrate_hub(cur_lane, tol)
@@ -163,12 +170,6 @@ class afcBoxTurtle(afcUnit):
             if cur_hub.state:
                 # reset at hub
                 cur_lane.move(cur_hub.move_dis * -1, cur_lane.short_moves_speed, cur_lane.short_moves_accel, True)
-
-            bowden_dist = 0
-            if cur_extruder.tool_start == 'buffer':
-                bowden_dist = bow_pos - (cur_lane.short_move_dis * 2)
-            else:
-                bowden_dist = bow_pos - cur_lane.short_move_dis
 
             # Checking if user has set a custom unload length and adding the delta to the new
             # calibrated bowden distance
