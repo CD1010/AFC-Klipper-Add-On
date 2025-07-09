@@ -137,21 +137,22 @@ class afcBoxTurtle(afcUnit):
                 self.afc.reactor.pause(self.afc.reactor.monotonic() + 0.1)
                 if bow_pos >= fault_dis:
                     # fault if move to bowden length does not reach toolhead sensor return to calibration macro
-                    msg = 'while moving to toolhead. Failed after {}mm'.format(bow_pos)
-                    msg += '\n if filament stopped short of the toolhead sensor/ramming during calibration'
+                    sensor_type = "buffer sensor" if cur_extruder.tool_start == 'buffer' else "toolhead sensor"
+                    msg = 'while moving to {}. Failed after {}mm'.format(sensor_type, bow_pos)
+                    msg += '\n if filament stopped short of the {} during calibration'.format(sensor_type)
                     msg += '\n use the following command to increase bowden length'
-                    msg += '\n SET_BOWDEN_LENGTH HUB={} LENGTH=+(distance the filament was short from the toolhead)'.format(cur_hub.name)
+                    msg += '\n SET_BOWDEN_LENGTH HUB={} LENGTH=+(distance the filament was short from the {})'.format(cur_hub.name, sensor_type)
                     return False, msg, bow_pos
 
             if cur_extruder.tool_start != 'buffer':
                 # is using ramming, only use first trigger of sensor
                 bow_pos, checkpoint, success = self.calc_position(cur_lane, lambda: cur_lane.get_toolhead_pre_sensor_state(), bow_pos,
                                                                   cur_lane.short_move_dis, tol, 100, "retract from toolhead sensor")
-
-            if not success:
-                # fault if check is not successful
-                msg = 'Failed {} after {}mm'.format(checkpoint, bow_pos)
-                return False, msg, bow_pos
+                
+                if not success:
+                    # fault if check is not successful
+                    msg = 'Failed {} after {}mm'.format(checkpoint, bow_pos)
+                    return False, msg, bow_pos
 
             # Store the bowden distance before retracting
             bowden_dist = 0
