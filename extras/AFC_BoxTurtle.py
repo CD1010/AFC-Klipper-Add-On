@@ -144,6 +144,10 @@ class afcBoxTurtle(afcUnit):
                     msg += '\n SET_BOWDEN_LENGTH HUB={} LENGTH=+(distance the filament was short from the {})'.format(cur_hub.name, sensor_type)
                     return False, msg, bow_pos
 
+            # DEBUG: Log position when sensor triggers
+            sensor_type = "buffer sensor" if cur_extruder.tool_start == 'buffer' else "toolhead sensor"
+            self.logger.info("DEBUG: {} triggered at position: {}mm".format(sensor_type, bow_pos))
+
             if cur_extruder.tool_start != 'buffer':
                 # is using ramming, only use first trigger of sensor
                 bow_pos, checkpoint, success = self.calc_position(cur_lane, lambda: cur_lane.get_toolhead_pre_sensor_state(), bow_pos,
