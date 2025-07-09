@@ -240,7 +240,7 @@ class afcBoxTurtle(afcUnit):
         state_retracts = 0
         while state():
             # retract off of sensor
-            state_retracts =+ 1
+            state_retracts += 1
             cur_lane.move(short_move * -1, cur_lane.short_moves_speed, cur_lane.short_moves_accel, True)
             pos -= short_move
             check_p = '{} switch did not go false, reset lane and check switch'.format(checkpoint)
